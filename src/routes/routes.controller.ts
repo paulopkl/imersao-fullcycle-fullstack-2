@@ -1,52 +1,75 @@
 import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Patch,
-  Param,
-  Delete,
+    Controller,
+    Get,
+    Post,
+    Body,
+    Patch,
+    Param,
+    Delete,
+    Inject,
+    OnModuleInit,
 } from '@nestjs/common';
 import { RoutesService } from './routes.service';
 import { CreateRouteDto } from './dto/create-route.dto';
 import { UpdateRouteDto } from './dto/update-route.dto';
+import { ClientKafka } from '@nestjs/microservices';
+import { Producer } from '@nestjs/microservices/external/kafka.interface';
 
 @Controller('routes')
-export class RoutesController {
-  constructor(
-    private readonly routesService: RoutesService,
-    @Injectable() private kafkaClient: ClientKafka,
-  ) {}
+export class RoutesController implements OnModuleInit {
+    private kafkaProducer: Producer;
 
-  @Post()
-  create(@Body() createRouteDto: CreateRouteDto) {
-    return this.routesService.create(createRouteDto);
-  }
+    constructor(
+        private readonly routesService: RoutesService,
+        @Inject('KAFKA_SERVICE')
+        private kafkaClient: ClientKafka,
+    ) {}
 
-  @Get()
-  findAll() {
-    return this.routesService.findAll();
-  }
+    @Post()
+    create(@Body() createRouteDto: CreateRouteDto) {
+        return this.routesService.create(createRouteDto);
+    }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.routesService.findOne(+id);
-  }
+    @Get()
+    findAll() {
+        return this.routesService.findAll();
+    }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateRouteDto: UpdateRouteDto) {
-    return this.routesService.update(+id, updateRouteDto);
-  }
+    @Get(':id')
+    findOne(@Param('id') id: string) {
+        return this.routesService.findOne(+id);
+    }
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.routesService.remove(+id);
-  }
+    @Patch(':id')
+    update(@Param('id') id: string, @Body() updateRouteDto: UpdateRouteDto) {
+        return this.routesService.update(+id, updateRouteDto);
+    }
 
-  @Get(':id/start')
-  startRoute(@Param('id') id: string) {
-    console.log(id);
+    @Delete(':id')
+    remove(@Param('id') id: string) {
+        return this.routesService.remove(+id);
+    }
 
-    this.routesService.findOne(+id);
-  }
+    async onModuleInit() {
+        this.kafkaProducer = await this.kafkaClient.connect();
+    }
+
+    @Get(':id/start')
+    startRoute(@Param('id') id: string) {
+        const value = JSON.stringify({
+            routeId: id,
+            clientId: '',
+        });
+
+        this.kafkaProducer.send({
+            topic: 'route.new-direction',
+            messages: [
+                {
+                    key: 'route.new-direction',
+                    value,
+                },
+            ],
+        });
+    }
 }
+
